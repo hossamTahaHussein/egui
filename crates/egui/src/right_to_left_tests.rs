@@ -389,3 +389,65 @@ fn window_grip_at_the_bottom_left_right_to_left() {
     let (left, right) = window_grip_lines(true);
     assert!(left > 0 && right == 0, "{left} {right}");
 }
+
+/// A two-column grid's label and field, and the space the grid was given.
+fn grid_cells(right_to_left: bool) -> (Rect, Rect, Rect) {
+    let ctx = context(right_to_left);
+    let available = Cell::new(Rect::NOTHING);
+    let shapes = run_frames(&ctx, |ui| {
+        available.set(ui.available_rect_before_wrap());
+        crate::Grid::new("form").num_columns(2).show(ui, |ui| {
+            ui.label("Label one");
+            ui.label("Field one");
+            ui.end_row();
+            ui.label("Second label");
+            ui.label("F2");
+            ui.end_row();
+        });
+    });
+    let first = text_rect(&shapes, "Label one");
+    let second = text_rect(&shapes, "Field one");
+    (first, second, available.get())
+}
+
+#[test]
+fn grid_columns_left_to_right() {
+    let (label, field, available) = grid_cells(false);
+    assert!(label.max.x < field.min.x, "{label:?} {field:?}");
+    assert!(
+        (label.min.x - available.min.x).abs() < 4.0,
+        "{label:?} {available:?}"
+    );
+}
+
+#[test]
+fn grid_columns_right_to_left() {
+    let (label, field, available) = grid_cells(true);
+    assert!(
+        field.max.x < label.min.x,
+        "the first column is at the right: {label:?} {field:?}"
+    );
+    assert!(
+        (label.max.x - available.max.x).abs() < 4.0,
+        "it starts at the right edge: {label:?} {available:?}"
+    );
+}
+
+#[test]
+fn grid_cells_start_at_their_reading_start_right_to_left() {
+    let ctx = context(true);
+    let shapes = run_frames(&ctx, |ui| {
+        crate::Grid::new("align").num_columns(1).show(ui, |ui| {
+            ui.label("A much longer first row");
+            ui.end_row();
+            ui.label("Short");
+            ui.end_row();
+        });
+    });
+    let long = text_rect(&shapes, "A much longer first row");
+    let short = text_rect(&shapes, "Short");
+    assert!(
+        (long.max.x - short.max.x).abs() < 1.0,
+        "right-aligned: {long:?} {short:?}"
+    );
+}

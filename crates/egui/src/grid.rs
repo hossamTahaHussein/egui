@@ -87,6 +87,10 @@ pub(crate) struct GridLayout {
     max_cell_size: Vec2,
     color_picker: Option<ColorPickerFn>,
 
+    /// Right-to-left interface ([`Style::right_to_left`]): the first column is at the right.
+    /// Cells are laid out left to right as usual and mirrored within the available width.
+    right_to_left: bool,
+
     // Cursor:
     col: usize,
     row: usize,
@@ -126,10 +130,21 @@ impl GridLayout {
             min_cell_size: ui.spacing().interact_size,
             max_cell_size: Vec2::INFINITY,
             color_picker: None,
+            right_to_left: ui.style().right_to_left && initial_available.max.x.is_finite(),
 
             col: 0,
             row: 0,
         }
+    }
+
+    /// `rect` as drawn: mirrored within the available width in a right-to-left interface.
+    fn mirror(&self, rect: Rect) -> Rect {
+        if !self.right_to_left {
+            return rect;
+        }
+        let a = self.initial_available;
+        let left = a.min.x + a.max.x - rect.max.x;
+        Rect::from_min_size(crate::pos2(left, rect.min.y), rect.size())
     }
 }
 
@@ -186,7 +201,7 @@ impl GridLayout {
             .at_least(self.min_cell_size.y)
             .at_most(self.max_cell_size.y);
 
-        Rect::from_min_size(available.min, vec2(width, height))
+        self.mirror(Rect::from_min_size(available.min, vec2(width, height)))
     }
 
     pub(crate) fn next_cell(&self, cursor: Rect, child_size: Vec2) -> Rect {
@@ -197,15 +212,19 @@ impl GridLayout {
         };
         let height = self.prev_row_height(self.row);
         let size = child_size.max(vec2(width, height));
-        Rect::from_min_size(cursor.min, size).round_ui()
+        self.mirror(Rect::from_min_size(cursor.min, size))
+            .round_ui()
     }
 
-    #[expect(clippy::unused_self)]
     pub(crate) fn align_size_within_rect(&self, size: Vec2, frame: Rect) -> Rect {
         // TODO(emilk): allow this alignment to be customized
-        Align2::LEFT_CENTER
-            .align_size_within_rect(size, frame)
-            .round_ui()
+        // A cell's content starts at its reading start.
+        let align = if self.right_to_left {
+            Align2::RIGHT_CENTER
+        } else {
+            Align2::LEFT_CENTER
+        };
+        align.align_size_within_rect(size, frame).round_ui()
     }
 
     pub(crate) fn justify_and_align(&self, frame: Rect, size: Vec2) -> Rect {
@@ -265,7 +284,7 @@ impl GridLayout {
         };
         // Paint background for coming row:
         let size = Vec2::new(self.prev_state.full_width(self.spacing.x), height);
-        let rect = Rect::from_min_size(cursor.min, size);
+        let rect = self.mirror(Rect::from_min_size(cursor.min, size));
         let rect = rect.expand2(0.5 * self.spacing.y * Vec2::Y);
         let rect = rect.expand2(2.0 * Vec2::X); // HACK: just looks better with some spacing on the sides
 
